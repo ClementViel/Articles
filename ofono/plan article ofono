@@ -1,0 +1,131 @@
+Plan article ofono
+
+I - Présentation
+	I.1 Ofono une pile téléphonique pour systèmes linux.
+	Ofono est une pile téléphonique développée par Intel dont le développement est aujourd'hui assuré par la communauté. Ofono est distribué sous une licence GPL-2.0+ et est écrit en langage C. Une pile téléphonique est un framework permettant de faire abstraction du matériel (le modem en lui-même) et du protocole de communication entre le CPU et le modem : Hayes AT, QMI,... et d'offrir une interface utilisateur générique en ce qui concerne les use cases les plus courant d'un modem : appels, SMS et des méthodes spécifiques à un matériel. Pour garantir la généricité, l'interface utilisateur est assurée par le formalisme DBus :
+	- Ofono est un processus enregistré sur le bus système.
+	- Un modem est un objet possèdant des interfaces.
+	- chaque interface possède des méthodes (use cases)
+	- certaines interfaces déclarent des objets, eux-même pouvant exécuter des méthodes.
+Le schéma ci-dessous décrit la hiérarchie interne d'ofono.
+<schéma>.
+
+Il est aussi possible d'utiliser les méthodes d'ofono via les commandes génériques décrite dans la documentation de freedesktop.org.
+<exemple>
+
+Ofono est un framework pensé de manière minimaliste. L'empreinte mémoire de la stack sur un système linux est de <chiffre>. Il utilise très peu de librairies annexes (glib et dbus), ainsi l'intégration sur un système en est facilité sur des systèmes embarqués comme nous le verront dans la partie <partie>. Cependant, pour pouvoir utiliser la pile téléphonique en supplément du bluetooth ou du réseau sur un système donné, Ofono à besoin d'autres logiciels comme BlueZ ou ConnMan, il ne peut pas le faire tout seul.
+
+L'intérêt d'utiliser une pile téléphonique réside dans le fait de s'abstraire du type de modem et du type de génération de télécom (GSM, GPRS, 3G, LTE). Tout est laissé à la fonctionnalité.
+
+
+	I.2 Usage dans l'embarqué
+        Ofono est un projet déjà utilisé dans l'industrie mais aussi dans les produits grand public. On le retrouve
+        notamment dans différents systèmes d'exploitation.
+
+	    	sailfish OS
+
+            Sailfish Os est un système d'exploitation développé à partir de Mer Linux, il est embarqué sur le smartphone
+            Jolla dévellopé par la société du même nom.
+        MeeGo
+            MeeGo est une distribution Linux développée par Intel et Nokia, embarquant Ofono et elle-même embarquée sur
+            le N9, smartphone réalisé par Nokia en 2011.
+		Tizen
+            Tizen est un système d'exploitation pour plateformes mobiles développé cojointement par la fondation Linux,
+            Samsung et Intel.
+		Ubuntu Touch
+            Ubuntu Touch est l'OS développé par la société Canonical pour les plateformes mobiles. Comme les OS
+            précédents, il embarque ofono.
+
+       Chacun des OS cités précedemment à été embarqué sur des matériels différents. Cela implique gérer des modems
+       différents :
+       <liste modems>
+
+	Dans les système présenté ci-dessus, on retrouve majoritairement la combinaison : ofono-connman afin d'assurer la
+    gestion des connexions de données via le modem. En effet, bien que ce soit le modem 3G qui envoie effectivemen les
+    données, c'est ConnMan qui créé et gère l'interface réseau associée à cette connexion. Ofono ayant pour rôle la
+    transmission des informations relatives au modem (adresse IP, état du réseau, force du signal, ...) à ConnMan. le
+    fonctionnement de cette combinaison sera éclairci dans la partie <partie>.
+    
+    I.3 Etat du developpement actuel / futur d'ofono.
+
+    Bien que le git d'ofono soit régulièrement mis à jour, rien n'indique de changement majeur à venir. actuellement le
+    dépôt principal d'ofono est alimenté par des développeurs améliorant le support des drivers. Dans le "langage Ofono"
+    améliorer le support des drivers revient à implémenter ou robustifier la prise en charge des commandes DBus pour
+    différents modems.
+    Une importance particulière est donnée au RIL modem. RIL signifie Radio Interface Layer, c'est l'interface
+    matériel-logiciel utilisée par Android et Windows. Ofono peut gérer le matériel basé sur la technologie RIL ainsi on
+    a l'architecture suivante :
+    <schéma>
+    Le développement du spport pour le RILmodem permet d'améliorer la compatibilité avec Androïd pour un OS embarquant
+    Ofono.
+
+II - Mise en place dans un projet linux embarqué (i.e intégrer ofono à son rootfs)
+	II.1 Yocto
+Pour embarquer ofono dans un yocto, la procédure est très simple. En effet, de base, ofono est embarqué dans poky. Il
+suffit ainsi de créer l'image core-image-base pour avoir ofono. Cependant, la recette doit être mise à jour. Voici une
+copie du fichier ofono_git.bb permettant de récupérer et compiler la dernière version d'ofono.
+<fichier>
+
+On peut compiler donc compiler l'image contenant ofono et l'exécuter via qemu :
+- compilation : bitbake core-image-base
+- exécution : run qemux86
+
+on obtient le shell suivant. En cherchant la liste des process lancés par systemd on obtient le résultat suivant :
+systemctl status
+
+
+	II.2 Buildroot
+		exemple d'une compilation boot-loader + kernel + rootfs avec ofono dedans.
+	II.3 Raw Cross Compilation
+		comment configurer et compiler les sources d'ofono pour une cible particulière ? (autotools)
+Cette étape consiste à faire, à la main, ce que font buildroot et yocto avec leurs scripts. On considère que l'utilisateur a déjà installé un cross-compiler. Prenons l'exemple d'un raspberry pi. En premier lieu, il faut cloner le dépôt de Ofono :
+git clone <URL>
+
+Ensuite, il faut exécuter autotools afini de créer le script "configure". Pour cela il suffit d'exécuter le script "bootstrap" fourni par Ofono :
+./bootstrap.
+
+On ajoute le chemin vers le cross-compiler dans le path : 
+export PATH=$PATH:<chemin-vers-cross-compiler>
+
+On exécute le script configure en spécifiant la cible :
+./configure --host=arm-linux
+
+Il est possible que le script sorte en erreur du fait de la non-détection de librairies nécessaires à Ofono. Dans ce cas, il convient de trouver ces librairies dans le sysroot du cross-compiler et d'ajouter les chemins idoines dans la variable d'environnement PKG_CONFIG_PATH.
+
+Lorsque le script configure a créé le makefile adéquat, il ne reste plus qu'à compiler Ofono. Il faut noter que Ofono, lors de la compilation ressort un grand nombre de warnings. On le compile en utilisant la commande make.
+
+Une fois l'exécutable généré, on le transfère sur la cible par le moyen que l'on souhaite : scp, tftp,... et on l'exécute. Ofono, pour être exécuté, doit être situé dans le répertoire /usr/sbin.
+
+
+
+	II.4 Configuration
+	    Nous allons voir, dans cette partie, comment configurer ofono. Ofono n'a pas besoin de configuration comme un
+        autre service, tel que httpd par exemple, pourrait réclamer. Ainsi, le seul besoin en termes de configuration
+        concerne systemd. Grâce à systemd, il est possible de lancer ofono automatiquement tout en spécifiant les
+        services devant être lancés avant pour assurer le bon fonctionnement d'ofono.
+		Voici un exemple de fichier ofono.service : 
+        
+        [Unit]                                                                                                                                                                                                                                    
+        Description=Telephony service                                                                                                                                                                                                             
+        After=syslog.target                                                                                                                                                                                                                       
+                                                                                                                                                                                      
+        [Service]                                                                                                                                                                                                                                 
+        Type=dbus                                                                                                                                                                                                                                 
+        BusName=org.ofono                                                                                                                                                                                                                         
+        ExecStart=@installpath@/ofonod -n                                                                                                                                                                                                         
+        Restart=always                                                                                                                                                                                                                            
+        StandardError=null                                                                                                                                                                                                                                                                                                                      
+        Après avoir configuré ofono pour systemd il suffit de démarrer le système, le daemon ofono sera lancé
+        automatiquement. 
+
+
+
+III - Utilisation (cookbook)
+	Cas d'utilisation utilisateur
+	-> envoyer SMS
+	-> recevoir SMS
+	-> appeler
+	-> recevoir appel
+	-> data : ping + wget
+
+IV - Philosophie Ofono : architecture + fonctionnement (si ya la place et le temps)
